@@ -68,8 +68,9 @@ import re
 raw = open("/tmp/p10k-check.raw", "rb").read().decode("utf-8", "replace")
 vis = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[78]|\r", "", raw)
 print([re.sub(" {3,}", " … ", l) for l in vis.split("\n") if "❯" in l])
-print("orange dir block:", "48;2;217;119;87m" in raw)
-print("no frame / no rounded caps:", not any(c in raw for c in "╭╮╰╯"))
+print("orange path text:", "38;2;217;119;87m" in raw)
+print("no background blocks:", "\x1b[48;" not in raw)
+print("no frame:", not any(c in raw for c in "╭╮╰╯"))
 PY
 ```
 
