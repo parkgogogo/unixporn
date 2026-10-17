@@ -1,0 +1,24 @@
+name: Claude Dark (1e1e1e)
+accent: "#d97757"
+background: "#1e1e1e"
+foreground: "#e8e6dc"
+details: darker
+terminal_colors:
+  normal:
+    black: "#333333"
+    red: "#e5636f"
+    green: "#93a86f"
+    yellow: "#e2b56a"
+    blue: "#6a9bcc"
+    magenta: "#c58bb5"
+    cyan: "#6fb0a5"
+    white: "#b0aea5"
+  bright:
+    black: "#787878"
+    red: "#f08890"
+    green: "#adc28a"
+    yellow: "#efca8d"
+    blue: "#8db6de"
+    magenta: "#d8a9cc"
+    cyan: "#92c8bf"
+    white: "#faf9f5"
