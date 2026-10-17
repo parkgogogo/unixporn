@@ -4,4 +4,4 @@
 
 | 目录 | 内容 |
 |---|---|
-| [`Orca/`](Orca/README.md) | Orca 终端（默认暗色模式）：Claude Dark 配色（`#1e1e1e`）、单行直角色块的 Powerlevel10k 提示符 |
+| [`Orca/`](Orca/README.md) | Orca 终端（默认暗色模式）：Claude Dark 配色（`#1e1e1e`）、单行无背景色块的 Powerlevel10k 提示符 |
