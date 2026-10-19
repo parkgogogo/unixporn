@@ -4,5 +4,5 @@
 
 | 目录 | 内容 |
 |---|---|
-| [`Orca/`](Orca/README.md) | Orca 终端（默认暗色模式）：Claude Dark 配色（`#1e1e1e`）、单行无背景色块的 Powerlevel10k 提示符 |
+| [`Orca/`](Orca/README.md) | Orca 终端（默认暗色模式）：Claude Dark 配色（`#1e1e1e`）、JetBrains Mono 字体、单行无背景色块的 Powerlevel10k 提示符 |
 | [`DSH-TUI/`](DSH-TUI/README.md) | dsh-TUI（DeepSeek Harness 终端界面）：用 fork 版（parkgogogo/dsh-TUI），极简界面、Bash 只占一行、连续工具调用折成一行、Think 只显示状态，配色和终端同一套 Claude Dark |

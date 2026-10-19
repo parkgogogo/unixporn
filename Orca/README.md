@@ -2,11 +2,12 @@
 
 这是一份写给 agent 的操作手册：在任何一台 Mac 上把终端外观复现成和原机**完全一致**，并在配置变化后把改动写回本仓库。
 
-Orca 本身保持默认设置（暗色模式），只导入一个终端配色主题。外观分三层：
+Orca 本身保持默认设置（暗色模式），只导入一个终端配色主题、改终端字体。外观分三层：
 
 | 层 | 管什么 | 本目录里的文件 |
 |---|---|---|
 | Orca 终端配色 | 终端的背景、文字和 16 色 | `claude-dark-1e1e1e.yaml` |
+| 终端字体 | JetBrains Mono（Nerd Font 版），14 号 | 无文件，在 Orca 设置里填（见第 3 步） |
 | zsh 提示符 | 单行、无背景色块的 Powerlevel10k 提示符 | `p10k.zsh` |
 | Claude Code | Claude Code 自己的 UI 配色 | 无文件，只有一项设置（见第 4 步） |
 
@@ -19,8 +20,8 @@ Orca 本身保持默认设置（暗色模式），只导入一个终端配色主
 ## 1. 安装依赖
 
 ```sh
-# 提示符里的图标需要 Nerd Font
-brew install --cask font-fira-code-nerd-font
+# 终端字体：JetBrains Mono 的 Nerd Font 版，自带提示符要用的图标
+brew install --cask font-jetbrains-mono-nerd-font
 
 # oh-my-zsh（已安装就跳过）
 [ -d ~/.oh-my-zsh ] || sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
@@ -33,7 +34,7 @@ ZC=${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
 
 想和原机逐字一致，可以把 Powerlevel10k 固定到原机版本：`git -C $ZC/themes/powerlevel10k checkout 20323d6f8cd267805a793dafc840d22330653867`。提示符用了 `'#d97757'` 这种十六进制颜色，太旧的 Powerlevel10k 不支持。
 
-**验证：** `ls ~/Library/Fonts /Library/Fonts | grep -i "FiraCode"` 有输出；上面三个目录都存在。
+**验证：** `ls ~/Library/Fonts /Library/Fonts | grep JetBrainsMonoNerdFontMono-SemiBold` 有输出；上面三个目录都存在。
 
 ## 2. zsh 提示符
 
@@ -76,16 +77,30 @@ PY
 
 在非 git 目录、conda 处于 `base` 时，期望输出只有一行，形如 `'~/path ❯ '`，后面三项都是 `True`。
 
-## 3. Orca 终端配色
+## 3. Orca 终端配色和字体
 
-Orca 的其他设置都保持默认，确保 App theme 是 **Dark** 即可。然后导入配色：
+Orca 的其他设置都保持默认，确保 App theme 是 **Dark** 即可。然后：
 
 1. Orca → Settings → Terminal Themes → **Import from YAML**，选本目录的 `claude-dark-1e1e1e.yaml`。
 2. 把深色终端主题（Dark theme）设为 **Claude Dark (1e1e1e)**。
+3. Orca → Settings → Terminal 的字体（Font family）填下面这一行，字号 14，字重 400，粗体字重 600：
 
-这两步需要用户在界面里点。agent 不要去改 Orca 的设置数据库，因为 Orca 运行时会用内存里的设置把它覆盖掉。
+   ```text
+   "JetBrainsMono Nerd Font Mono", "PingFang SC", "PingFang TC"
+   ```
 
-**验证：** 让用户截图，或者看用户的截图：终端背景是 `#1e1e1e`，光标是橙色 `#d97757`，提示符的路径是橙色文字，没有背景色块。
+   用 `Nerd Font Mono` 这一款，不用 `Nerd Font`：Mono 款的图标严格占一个字符宽，TUI 的边框和对齐不会被挤歪。中文回退到苹方。
+
+这三步需要用户在界面里点。agent 不要去改 Orca 的设置数据库，因为 Orca 运行时会用内存里的设置把它覆盖掉。
+
+**验证：** 让用户截图，或者看用户的截图：终端背景是 `#1e1e1e`，光标是橙色 `#d97757`，提示符的路径是橙色文字，没有背景色块；字体是 JetBrains Mono（`0` 中间是点、`l` 底部带弯），git 分支前的图标正常显示、不是方块。
+
+也可以只读地查 Orca 当前存的字体（不要写这个数据库）：
+
+```sh
+sqlite3 -readonly ~/Library/Application\ Support/orca/profiles/local-default/profile-state.db \
+  "select payload from profile_state_documents" | grep -oE '"terminalFont(Family|Size)":[^,]*'
+```
 
 ## 4. Claude Code
 
