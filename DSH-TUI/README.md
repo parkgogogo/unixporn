@@ -2,7 +2,7 @@
 
 这是一份写给 agent 的操作手册：在任何一台 Mac 上把 [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI)（DeepSeek Harness 的终端界面）复现成和原机**完全一致**，并在配置变化后把改动写回本仓库。
 
-目标是干净：没有开屏大字和吉祥物，不显示 emoji；Bash 只占一行，连续的 Bash/读文件/搜索折成一行摘要；Think 只显示状态，不显示思考内容；配色和 [`Orca/`](../Orca/README.md) 的终端主题是同一套 Claude Dark（`#1e1e1e`）。
+目标是干净：没有开屏大字和吉祥物，不显示 emoji；Bash、读文件、搜索从第一次调用起就是一行摘要，连续的共用这一行；Think 只显示状态，不显示思考内容；配色和 [`Orca/`](../Orca/README.md) 的终端主题是同一套 Claude Dark（`#1e1e1e`）。
 
 效果：
 
@@ -21,7 +21,7 @@
   deepseek-flash · high · cache 97% · ≈¥0.01 · repo     ctx 0.9%
 ```
 
-- 连续两次以上的 Bash、读文件、搜索调用（连同中间的 Think）折成一行摘要 `▸ Bash ×6 · Read ×2 · 14s`。摘要原地增长：正在跑的命令和计时就显示在这一行上，新的调用只让计数加一，不会先冒出一张卡再收起来。改文件、报错、非零退出码、子 agent 和 agent 说的话会打断折叠，照常单独显示。
+- Bash、读文件、读图片、搜索调用从第一次起就显示成一行摘要 `▸ Bash · 1s · sleep 5`，后面连续的调用（连同中间和之后的 Think）共用这一行：`▸ Bash ×6 · Read ×2 · 14s`。这一行原地增长：新调用只让计数加一，正在跑的命令、计时和调用之后的 `Thinking…` 都显示在这一行上，不会先冒出一张卡再收起来。时间是这些调用实际运行的时长，不含模型在调用之间思考的时间。改文件、报错、非零退出码、子 agent 和 agent 说的话会打断折叠，照常单独显示。
 - 单条 Bash 运行时只有一行命令加计时，不滚动输出；结束后也只有这一行。命令失败时多一行退出码，工具报错时显示错误内容。
 - Think 进行时是 `⠼ Thinking…`，结束后是 `* Thinking`，不显示思考文字。
 - 想看完整的命令、输出或思考内容：`Ctrl+O` 展开全部，或者点那一行（点摘要行展开这一组）。
@@ -81,7 +81,7 @@ node apply.mjs check
 
 三行都是 `✓`。然后启动 `dsh-tui`，运行 `/theme status`，显示 `Current theme claude-dark-1e1e1e`。
 
-最后让 agent 跑一条有多行输出的命令，比如发一句「用 bash 运行 `sleep 3; seq 1 50`，然后只回复 ok」：运行中只看到一行 `• Bash(sleep 3; seq 1 50) · 1s` 在计时，结束后还是这一行，没有输出内容。再发一个需要思考的问题，思考时只出现 `⠼ Thinking…`。最后发「用 bash 依次单独运行 pwd、ls、echo hi，每条一次工具调用，然后回复 ok」：三条命令折成一行 `▸ Bash ×3 · 0s`，`Ctrl+O` 能展开成三张卡片。
+最后让 agent 跑一条有多行输出的命令，比如发一句「用 bash 运行 `sleep 3; seq 1 50`，然后只回复 ok」：运行中只看到一行 `▸ Bash · 1s · sleep 3; seq 1 50` 在计时，结束后还是这一行，没有输出内容；点一下这一行展开成带输出的卡片，再点收回。再发一个需要思考的问题，思考时只出现 `⠼ Thinking…`。最后发「用 bash 依次单独运行 pwd、ls、echo hi，每条一次工具调用，然后回复 ok」：三条命令折成一行 `▸ Bash ×3 · 0s`，`Ctrl+O` 能展开成三张卡片。
 
 ## 3. 撤销
 
@@ -118,16 +118,18 @@ dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui
 
 ## fork 改了什么
 
-改动都在 [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，是上游 `main` 之上的两个提交（`feat(transcript): compactTools setting and thinkingFold "status"` 和 `fix(transcript): grow compact tool runs in place`），只改 `src/`，按上游规矩过了 `pnpm build` 的全部检查。两个新东西都是 `/settings` 里的正式选项，默认关，`settings.json` 打开。
+改动都在 [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，是上游 `main` 之上的三个提交（`feat(transcript): compactTools setting and thinkingFold "status"`、`fix(transcript): grow compact tool runs in place`、`fix(transcript): one summary-line shape from a run's first call`），改动在 `src/`，加一个构建检查 `verify:tool-group`，按上游规矩过了 `pnpm build` 的全部检查。两个新东西都是 `/settings` 里的正式选项，默认关，`settings.json` 打开。
 
 `compactTools`（新文件 `src/components/Chat/ToolGroup.tsx`，加上 `MessageList.tsx`、`AssistantToolUseMessage.tsx` 和设置的接线）：
 
 1. 终端卡（Bash/PowerShell）收起时只剩标题一行：运行中不滚动输出，结束后不显示输出，耗时在标题右边计时；命令很长时截断成一行，耗时不会被挤到第二行。
 2. `read_image` 收起时也只剩一行，不显示给模型看的 `<path>…<type>image</type>…` 文本，也不显示缩略图（没有图形协议的终端里那是一块 12 行的空白）。
-3. 连续两次以上的读文件、搜索、终端调用合成一组（`toolGroupable`：卡片类型是 terminal、read、search，或工具名在 `GROUPABLE_TOOL_NAMES` 里），中间的 Think 一起收进去，结尾的 Think 不收。组头一行写各工具的次数和总耗时；正在运行的那条也收进组里，组头这一行显示它的命令，耗时每秒走动，所以整组始终只有一行、原地增长。
-4. 报错、非零退出码、被信号杀掉的命令照常显示错误内容，也不进组；改文件（diff）、todo、提问、子 agent 和 agent 的文字会把组断开。
-5. 点组头或 `Ctrl+O` 展开；展开后卡片、输出和图片都照常显示。
-6. 模型在两次调用之间先发出一段空回复时，不再画一个孤零零的 `●`（底部的转圈状态已经说明它在干活）；真有文字到了才显示。
+3. 读文件、搜索、终端调用（`toolGroupable`：卡片类型是 terminal、read、search，或工具名在 `GROUPABLE_TOOL_NAMES` 里）从第一次调用起就画成摘要行，单独一次也是一组，所以第二次调用来的时候这一行只是计数加一，样子不变。之前单独一次时画的是卡片 `• Bash(ls)`，第二次一来就换成 `▸ Bash ×2`，并行调用时几十毫秒内换掉，看起来就是闪一下。
+4. 连续的调用合成一组，调用之后的 Think 也收进组里（结尾的也收；它单独画会先挂在摘要下面，下一次调用一来又被收走，也是闪）。组头一行写各工具的次数、实际运行时长（并行的重叠只算一次）和正在运行的命令；Think 进行中末尾显示 `· Thinking…`。
+5. 报错、非零退出码、被信号杀掉的命令照常显示错误内容，也不进组；改文件（diff）、todo、提问、子 agent 和 agent 的文字会把组断开。
+6. 点组头或 `Ctrl+O` 展开；展开后卡片、输出和图片都照常显示。单独一次的调用展开后直接是那张卡片，再点卡片收回。
+7. 模型在两次调用之间先发出一段空回复时，不再画一个孤零零的 `●`（底部的转圈状态已经说明它在干活）；真有文字到了才显示。
+8. 顺带修了上游一个小毛病：标题里的文件路径可点击时（写文件、改文件的卡片），工具名会被挤成 `Writ…`，现在只截路径。
 
 `thinkingFold: status`（`AssistantThinkingMessage.tsx`、`MessageList.tsx`）：Think 行只有转圈加 `Thinking…`，结束后是 `* Thinking`，不显示思考文字和 `(ctrl+o to expand)`；`Ctrl+O` 照样能看全文。
 
@@ -147,6 +149,19 @@ sh ~/labs/unixporn/DSH-TUI/install-fork.sh
 ```
 
 `pnpm build` 通过之后，再按第 2 步的「验证」实际跑一遍，最后更新上面「原机环境」里的版本号。
+
+## 改了折叠显示之后：跑闪烁检查
+
+`pnpm build` 里的 `verify:tool-group` 只检查折叠的逻辑，看不到界面上一闪而过的东西。改了 `ToolGroup.tsx`、`MessageList.tsx` 里工具行相关的代码，或者 rebase 了上游之后，装好再跑：
+
+```sh
+sh ~/labs/unixporn/DSH-TUI/flash-check/check.sh          # 8 个场景，1～3 分钟，花几分钱
+sh ~/labs/unixporn/DSH-TUI/flash-check/check.sh par seq  # 只跑其中几个
+```
+
+它在 tmux 里真实跑 8 个场景（顺序调用、并行调用、读文件/搜索/报错/写文件混合、读图、带实时输出的长命令、窄屏长命令、调用之间思考、只用搜索工具），录下终端的原始输出，再用终端模拟器逐帧回放：只要有一张工具卡画出来又消失（先卡片再变 `×2` 的那种闪），或者工具行、Think 行画出来又被收回，这个场景就是 `VERDICT FAIL`，脚本退出码为 1。回答文字流式输出时的重新排版只记作 `reflow`，不算失败。需要 tmux、python3，第一次会在临时目录里建一个装 `pyte` 的 venv。
+
+截屏轮询（每 0.2 秒 `tmux capture-pane`）抓不到几十毫秒的闪烁，之前就是这样漏掉的，所以必须逐帧回放。
 
 ---
 
