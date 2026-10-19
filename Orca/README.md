@@ -86,8 +86,10 @@ Orca 的其他设置都保持默认，确保 App theme 是 **Dark** 即可。然
 3. Orca → Settings → Terminal 的字体（Font family）填下面这一行，字号 14，字重 400，粗体字重 600：
 
    ```text
-   "JetBrainsMono Nerd Font Mono", "PingFang SC", "PingFang TC"
+   JetBrainsMono Nerd Font Mono", "PingFang SC", "PingFang TC
    ```
+
+   首尾**不带**引号，中间的引号要留着：Orca 会在整串外面再包一层引号，拼出来正好是 `"JetBrainsMono Nerd Font Mono", "PingFang SC", "PingFang TC"`。首尾也带引号的话，第一个字体名会变成 `""JetBrainsMono…`，字体就失效了。
 
    用 `Nerd Font Mono` 这一款，不用 `Nerd Font`：Mono 款的图标严格占一个字符宽，TUI 的边框和对齐不会被挤歪。中文回退到苹方。
 
