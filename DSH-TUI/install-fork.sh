@@ -25,11 +25,18 @@ pnpm install --frozen-lockfile
 pnpm build
 
 # npm pack, not pnpm: the vendored @dsh-std/* are bundledDependencies.
+# The tarball name carries the commit and build time: pnpm skips a file:
+# dependency whose path did not change, even when its contents did.
+# pnpm re-reads the currently installed tarball during `add`, so the old one
+# is deleted only after the new one installed.
 mkdir -p "$PACK_DIR"
-rm -f "$PACK_DIR"/deepseek-harness-tui-dsh-tui-*.tgz
-npm pack --pack-destination "$PACK_DIR"
-TARBALL=$(ls "$PACK_DIR"/deepseek-harness-tui-dsh-tui-*.tgz)
+STAGE=$(mktemp -d)
+PACKED=$(npm pack --silent --pack-destination "$STAGE" | tail -n 1)
+TARBALL="$PACK_DIR/dsh-tui-$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S).tgz"
+mv "$STAGE/$PACKED" "$TARBALL"
+rmdir "$STAGE"
 
 # The profile's package.json records this path; keep the tarball in place.
 dsh plugin --profile dsh-tui add "$TARBALL"
+find "$PACK_DIR" -name '*.tgz' ! -path "$TARBALL" -delete
 echo "installed $TARBALL"

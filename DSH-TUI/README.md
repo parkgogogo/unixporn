@@ -21,7 +21,7 @@
   deepseek-flash · high · cache 97% · ≈¥0.01 · repo     ctx 0.9%
 ```
 
-- 连续两次以上的 Bash、读文件、搜索调用（连同中间的 Think）折成一行摘要 `▸ Bash ×6 · Read ×2 · 14s`。正在跑的那条单独显示在摘要下面，跑完就收进摘要。改文件、报错、非零退出码、子 agent 和 agent 说的话会打断折叠，照常单独显示。
+- 连续两次以上的 Bash、读文件、搜索调用（连同中间的 Think）折成一行摘要 `▸ Bash ×6 · Read ×2 · 14s`。摘要原地增长：正在跑的命令和计时就显示在这一行上，新的调用只让计数加一，不会先冒出一张卡再收起来。改文件、报错、非零退出码、子 agent 和 agent 说的话会打断折叠，照常单独显示。
 - 单条 Bash 运行时只有一行命令加计时，不滚动输出；结束后也只有这一行。命令失败时多一行退出码，工具报错时显示错误内容。
 - Think 进行时是 `⠼ Thinking…`，结束后是 `* Thinking`，不显示思考文字。
 - 想看完整的命令、输出或思考内容：`Ctrl+O` 展开全部，或者点那一行（点摘要行展开这一组）。
@@ -53,7 +53,7 @@ dsh-tui   # 第一次运行会初始化 ~/.dsh/profiles/dsh-tui，并走首次�
 sh install-fork.sh
 ```
 
-`install-fork.sh` 做的事：把 fork 克隆到 `~/labs/dsh-TUI`（已有就拉最新；换位置用 `DSH_TUI_SRC=/path sh install-fork.sh`），拉子模块 `vendor/dsh-std`，`pnpm install` + `pnpm build`（编译加上游自带的全部构建检查，几分钟），`npm pack` 打成 `~/.dsh-tui/fork/deepseek-harness-tui-dsh-tui-0.16.1.tgz`，最后 `dsh plugin --profile dsh-tui add` 这个 tarball。profile 的 `package.json` 会记下 tarball 路径，所以别删 `~/.dsh-tui/fork/`。
+`install-fork.sh` 做的事：把 fork 克隆到 `~/labs/dsh-TUI`（已有就拉最新；换位置用 `DSH_TUI_SRC=/path sh install-fork.sh`），拉子模块 `vendor/dsh-std`，`pnpm install` + `pnpm build`（编译加上游自带的全部构建检查，几分钟），`npm pack` 打成 `~/.dsh-tui/fork/dsh-tui-<提交>-<时间>.tgz`，最后 `dsh plugin --profile dsh-tui add` 这个 tarball，装好后删掉旧的 tarball。文件名里带提交和时间，是因为 pnpm 看到 `file:` 依赖路径没变就不重装，哪怕内容变了。profile 的 `package.json` 会记下 tarball 路径，所以别删 `~/.dsh-tui/fork/`。
 
 全局装的那个 `@deepseek-harness-tui/dsh-tui` 只是启动器，真正运行的是 profile 里的这份。
 
@@ -118,15 +118,16 @@ dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui
 
 ## fork 改了什么
 
-改动都在 [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，是上游 `main` 之上的一个提交（`feat(transcript): compactTools setting and thinkingFold "status"`），只改 `src/`，按上游规矩过了 `pnpm build` 的全部检查。两个新东西都是 `/settings` 里的正式选项，默认关，`settings.json` 打开。
+改动都在 [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，是上游 `main` 之上的两个提交（`feat(transcript): compactTools setting and thinkingFold "status"` 和 `fix(transcript): grow compact tool runs in place`），只改 `src/`，按上游规矩过了 `pnpm build` 的全部检查。两个新东西都是 `/settings` 里的正式选项，默认关，`settings.json` 打开。
 
 `compactTools`（新文件 `src/components/Chat/ToolGroup.tsx`，加上 `MessageList.tsx`、`AssistantToolUseMessage.tsx` 和设置的接线）：
 
 1. 终端卡（Bash/PowerShell）收起时只剩标题一行：运行中不滚动输出，结束后不显示输出，耗时在标题右边计时；命令很长时截断成一行，耗时不会被挤到第二行。
 2. `read_image` 收起时也只剩一行，不显示给模型看的 `<path>…<type>image</type>…` 文本，也不显示缩略图（没有图形协议的终端里那是一块 12 行的空白）。
-3. 连续两次以上的读文件、搜索、终端调用合成一组（`toolGroupable`：卡片类型是 terminal、read、search，或工具名在 `GROUPABLE_TOOL_NAMES` 里），中间的 Think 一起收进去，结尾的 Think 不收。组头一行写各工具的次数和总耗时，正在运行的那条留在组头下面。
+3. 连续两次以上的读文件、搜索、终端调用合成一组（`toolGroupable`：卡片类型是 terminal、read、search，或工具名在 `GROUPABLE_TOOL_NAMES` 里），中间的 Think 一起收进去，结尾的 Think 不收。组头一行写各工具的次数和总耗时；正在运行的那条也收进组里，组头这一行显示它的命令，耗时每秒走动，所以整组始终只有一行、原地增长。
 4. 报错、非零退出码、被信号杀掉的命令照常显示错误内容，也不进组；改文件（diff）、todo、提问、子 agent 和 agent 的文字会把组断开。
 5. 点组头或 `Ctrl+O` 展开；展开后卡片、输出和图片都照常显示。
+6. 模型在两次调用之间先发出一段空回复时，不再画一个孤零零的 `●`（底部的转圈状态已经说明它在干活）；真有文字到了才显示。
 
 `thinkingFold: status`（`AssistantThinkingMessage.tsx`、`MessageList.tsx`）：Think 行只有转圈加 `Thinking…`，结束后是 `* Thinking`，不显示思考文字和 `(ctrl+o to expand)`；`Ctrl+O` 照样能看全文。
 
