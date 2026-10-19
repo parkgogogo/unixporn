@@ -1,0 +1,19 @@
+{
+  "name": "dsh-orca-bridge",
+  "version": "0.1.0",
+  "description": "DSH plugin that syncs DSH status and session history into Orca",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "orca-dsh": "bin/orca-dsh.js",
+    "orca-dsh-sync": "bin/orca-dsh-sync.js"
+  },
+  "engines": {
+    "node": ">=22.15"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT"
+}
