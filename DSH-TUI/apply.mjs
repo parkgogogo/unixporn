@@ -15,7 +15,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const MODE = process.argv[2] ?? 'apply';
 const DSH_HOME = process.env.DSH_HOME || join(homedir(), '.dsh');
 const TUI_HOME = join(homedir(), '.dsh-tui');
-const MARK = '/* unixporn-patch */\n';
+// Bump the version whenever PATCHES change: files carrying an older mark are
+// re-patched from their *.unixporn-orig copy.
+const MARK_PREFIX = '/* unixporn-patch';
+const MARK = `${MARK_PREFIX} v2 */\n`;
 const ORIG = '.unixporn-orig';
 const THEME = 'claude-dark-1e1e1e';
 
@@ -40,6 +43,99 @@ const PATCHES = {
         // A long command truncates to one row (hover shows it, Ctrl+O expands).
         ['_jsxs(Text, { children: ["(", folded.first, ")"] })', '_jsxs(Text, { wrap: "truncate-end", children: ["(", folded.first, ")"] })', 1],
         ['    if (hiddenLines <= 0 && clipped.hiddenChars === 0)\n        return undefined;\n', '', 1],
+        // The transcript's tool-run summary reuses the card's display names.
+        ['\nfunction displayName(name, displayKey) {', '\nexport function displayName(name, displayKey) {', 1],
+    ],
+    // A run of read / search / terminal calls (and the thinking rows between
+    // them) folds into one summary line: `▸ Bash ×5 · Read ×2 · 1m12s`. A call
+    // still running stays visible under it; edits, errors, non-zero exits,
+    // subagents and assistant text break the run. Click the line or Ctrl+O to unfold.
+    'lib/types/components/MessageList.js': [
+        ["import { JobGroupHeader } from './Chat/JobGroupHeader.js';", `import { JobGroupHeader } from './Chat/JobGroupHeader.js';
+import { formatDuration } from '../terminal-utils/format.js';
+import { displayName as toolDisplayName } from './messages/AssistantToolUseMessage.js';`, 1],
+        // Tool statuses land in place: hash them so the visible-rows cache rebuilds.
+        ["        if (row.kind !== 'job' || row.job === undefined)\n            continue;\n        jobsSig", `        if (row.kind === 'tool' && row.tool !== undefined) {
+            jobsSig = (jobsSig * 31 + row.id + toolGroupCode(row.tool) + (expandedRows.has(row.id) ? 7 : 0)) | 0;
+            continue;
+        }
+        if (row.kind !== 'job' || row.job === undefined)
+            continue;
+        jobsSig`, 1],
+        ['        const visibleOut = foldedMembers.size === 0 ? out : out.filter(row => !foldedMembers.has(row.id));', `        for (let i = 0; i < out.length; i++) {
+            if (out[i].kind !== 'tool' || !toolGroupable(out[i].tool))
+                continue;
+            let end = i;
+            for (let k = i + 1; k < out.length; k++) {
+                const next = out[k];
+                if (next.kind === 'tool' && toolGroupable(next.tool))
+                    end = k;
+                else if (next.kind !== 'reasoning' || next.streaming === true)
+                    break;
+            }
+            const tools = [];
+            for (let k = i; k <= end; k++)
+                if (out[k].kind === 'tool')
+                    tools.push(out[k].tool);
+            if (tools.length < 2) {
+                i = end;
+                continue;
+            }
+            const names = new Map();
+            let endedAt = 0;
+            let live = false;
+            for (const tool of tools) {
+                const name = toolDisplayName(tool.name, (tool.resultView ?? tool.callView)?.displayKey);
+                names.set(name, (names.get(name) ?? 0) + 1);
+                live = live || tool.status === 'running';
+                endedAt = Math.max(endedAt, tool.startedAt + (tool.durationMs ?? 0));
+            }
+            const summary = {
+                folded: !expanded && !expandedRows.has(out[i].id),
+                names: [...names],
+                startedAt: tools[0].startedAt,
+                ...(live ? {} : { endedAt }),
+            };
+            for (let k = i; k <= end; k++) {
+                out[k] = { ...(out[k]), toolGroup: { head: k === i, member: k > i, summary } };
+                if (summary.folded && k > i && !(out[k].kind === 'tool' && out[k].tool.status === 'running'))
+                    foldedMembers.add(out[k].id);
+            }
+            i = end;
+        }
+        const visibleOut = foldedMembers.size === 0 ? out : out.filter(row => !foldedMembers.has(row.id));`, 1],
+        // Group members sit flush under the summary line.
+        ['                const member = row.jobGroup !== undefined && !row.jobGroup.head;', '                const member = (row.jobGroup !== undefined && !row.jobGroup.head) || row.toolGroup?.member === true;', 1],
+        ["                : 0);\n            break;\n        }\n        case 'subagent':", "                : 0, row.toolGroup?.head === true, row.toolGroup?.member === true, row.toolGroup?.summary.folded === true);\n            break;\n        }\n        case 'subagent':", 1],
+        ['jobGroup: jobGroup, onToggleRow: onToggleRow,', 'jobGroup: jobGroup, toolGroup: row.toolGroup?.head ? row.toolGroup.summary : undefined, onToggleRow: onToggleRow,', 1],
+        ['jobGroup, onToggleRow, onToggleStreamView, streamViewToggled,', 'jobGroup, toolGroup, onToggleRow, onToggleStreamView, streamViewToggled,', 1],
+        // The head row draws the summary; its card shows only when unfolded or still running.
+        ['            return (_jsx(Box, { flexDirection: "column", ref: ref, children: _jsx(ToolLeafRow, { tool: tool, marginTopOnTurn: marginTopOnTurn, verbose: isExpanded || expanded,', '            return (_jsxs(Box, { flexDirection: "column", ref: ref, marginTop: toolGroup !== undefined && marginTopOnTurn ? 1 : 0, children: [toolGroup !== undefined && _jsx(ToolGroupHeader, { group: toolGroup, onToggle: toggleJobGroup }), (toolGroup === undefined || !toolGroup.folded || toolStatus === \'running\') && _jsx(ToolLeafRow, { tool: tool, marginTopOnTurn: toolGroup === undefined && marginTopOnTurn, verbose: toolGroup === undefined ? isExpanded || expanded : expanded,', 1],
+        ['sourceFolded: toolSourceFolded, fullscreen: fullscreen }) }));', 'sourceFolded: toolSourceFolded, fullscreen: fullscreen })] }));', 1],
+        ['const MemoRow = React.memo(TranscriptRow);', `const GROUP_TOOL_NAMES = new Set(['bash', 'powershell', 'sh', 'shell', 'terminal', 'read', 'glob', 'grep', 'ls', 'list', 'web_search', 'websearch', 'web_fetch', 'webfetch']);
+function toolGroupable(tool) {
+    if (tool === undefined || tool.status === 'error')
+        return false;
+    const view = tool.resultView ?? tool.callView;
+    if (view?.card === 'terminal')
+        return (view.exitCode ?? 0) === 0 && view.signal === undefined;
+    if (view?.card === 'read' || view?.card === 'search')
+        return true;
+    if (view !== undefined && view.card !== 'generic')
+        return false;
+    return GROUP_TOOL_NAMES.has(tool.name.toLowerCase());
+}
+function toolGroupCode(tool) {
+    return (tool.status === 'running' ? 1 : tool.status === 'error' ? 2 : 3) + (toolGroupable(tool) ? 4 : 0);
+}
+/** Summary line of a folded tool run: \`▸ Bash ×5 · Read ×2 · 1m12s\`. */
+function ToolGroupHeader({ group, onToggle }) {
+    const [hovered, setHovered] = useState(false);
+    const names = group.names.map(([name, n]) => (n > 1 ? name + ' ×' + n : name)).join(' · ');
+    const duration = group.endedAt === undefined ? '' : ' · ' + formatDuration(Math.max(0, group.endedAt - group.startedAt));
+    return (_jsxs(Box, { flexDirection: "row", gap: 1, onClick: onToggle, onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false), children: [_jsx(Text, { color: hovered ? 'accent' : 'inactive', children: group.folded ? '▸' : '▾' }), _jsx(Text, { wrap: "truncate-end", dimColor: !hovered, children: names + duration })] }));
+}
+const MemoRow = React.memo(TranscriptRow);`, 1],
     ],
 };
 
@@ -130,22 +226,34 @@ function patchStep(dir) {
             fail(`${label}: file missing — dsh-TUI layout changed, update PATCHES`);
             continue;
         }
-        const text = readFileSync(file, 'utf8');
-        const patched = text.startsWith(MARK);
+        let text = readFileSync(file, 'utf8');
+        const patched = text.startsWith(MARK_PREFIX);
+        const current = text.startsWith(MARK);
         if (MODE === 'check') {
-            say(`${patched ? '✓' : '·'} ${label} ${patched ? 'patched' : 'not patched'}`);
+            say(`${current ? '✓' : '·'} ${label} ${current ? 'patched' : patched ? 'patched by an older apply.mjs' : 'not patched'}`);
             continue;
         }
         if (MODE === 'revert') {
-            if (patched && existsSync(file + ORIG)) {
+            if (!patched)
+                say(`✓ ${label} not patched`);
+            else if (existsSync(file + ORIG)) {
                 copyFileSync(file + ORIG, file);
                 say(`✓ ${label} restored`);
             }
+            else
+                fail(`${label}: patched but ${ORIG} backup is missing — reinstall dsh-TUI to restore it`);
+            continue;
+        }
+        if (current) {
+            say(`✓ ${label} already patched`);
             continue;
         }
         if (patched) {
-            say(`✓ ${label} already patched`);
-            continue;
+            if (!existsSync(file + ORIG)) {
+                fail(`${label}: patched by an older apply.mjs but ${ORIG} backup is missing — reinstall dsh-TUI, then re-run`);
+                continue;
+            }
+            text = readFileSync(file + ORIG, 'utf8');
         }
         let out = text;
         const misses = [];
@@ -161,7 +269,8 @@ function patchStep(dir) {
             fail(`${label}: anchors drifted, file left untouched\n    ${misses.join('\n    ')}`);
             continue;
         }
-        copyFileSync(file, file + ORIG);
+        if (!patched)
+            copyFileSync(file, file + ORIG);
         writeFileSync(file, MARK + out);
         say(`✓ ${label} patched`);
     }
