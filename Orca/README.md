@@ -142,3 +142,13 @@ cp ~/.p10k.zsh p10k.zsh
 ```
 
 如果换了终端配色，把新主题的 YAML 放进本目录，同时更新第 3 步的文件名和上面的色表。最后提交并推送。
+
+---
+
+## Skills
+
+`Skills/` 下是配合 Orca 用的 agent skill，链接到 `~/.claude/skills/` 即可使用：
+
+| Skill | 用途 |
+|---|---|
+| [`orca-delegate`](Skills/orca-delegate/SKILL.md) | 一条命令把任务并行派给 Codex、Grok、DSH 等 agent，等全部结束后自动回收终端；绕开 dsh 丢回车、worker 死掉后空等等坑 |
