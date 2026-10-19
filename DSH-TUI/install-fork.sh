@@ -22,7 +22,9 @@ git -C "$SRC" submodule update --init --recursive
 
 cd "$SRC"
 pnpm install --frozen-lockfile
-pnpm build
+# A few upstream gates flake under the default one-job-per-CPU load
+# (overlay-occlusion, history-search, latex-math); 4 jobs keeps them steady.
+DSH_TUI_VERIFY_JOBS=${DSH_TUI_VERIFY_JOBS:-4} pnpm build
 
 # npm pack, not pnpm: the vendored @dsh-std/* are bundledDependencies.
 # The tarball name carries the commit and build time: pnpm skips a file:

@@ -10,7 +10,7 @@ ESC[?25l), fed to a pyte screen, and the transcript region (from the
 - CARD-FLASH: a tool card line (`• Bash(...)`) drawn and gone again before
   the final frame — the card-then-summary flash.
 - SHRINK: a frame with fewer transcript rows than the one before. It fails
-  when a tool line (summary `▸`, card, `⎿` body, Thinking row) was taken
+  when a tool line (summary `Ran 2 shell commands`, card, `⎿` body, Thinking row) was taken
   back; a reflow of the streamed answer text is only reported.
 
 Prints `VERDICT ok` or `VERDICT FAIL`; exit code 1 on FAIL."""
@@ -28,7 +28,8 @@ while i < len(data):
 screen = pyte.Screen(cols, rows)
 stream = pyte.ByteStream(screen)
 SPIN = re.compile(r'^\s*[·•●✻✽✶✳✢*⠁-⣿]\s+\S+…\s*\(')
-TOOL = re.compile(r'^\s*(▸|▾|[•⏺●✗]\s+[A-Z][\w ]*[( ]|⎿|\* Thinking|[⠁-⣿] Thinking)')
+SUMMARY = r'(Ran|Running|Read|Reading|Viewed|Viewing|Searched for|Searching for|Listed|Listing|Fetched|Fetching) \d|(运行了|正在运行|读取了|正在读取|查看了|正在查看|搜索了|正在搜索|列出了|正在列出|进行了|正在进行|抓取了|正在抓取) ?\d'
+TOOL = re.compile(r'^\s*(▸|▾|[•⏺●✗]\s+[A-Z][\w ]*[( ]|⎿|\* Thinking|[⠁-⣿] Thinking|' + SUMMARY + ')')
 CARD = re.compile(r'^\s*[•⏺●]?\s*[A-Z][A-Za-z ]*\(.*\)( · \d+(ms|s|m))?$')
 
 def transcript():
