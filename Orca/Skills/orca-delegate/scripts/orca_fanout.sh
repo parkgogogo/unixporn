@@ -12,6 +12,7 @@
 # State (run id, dispatch map) lives in $ORCA_FANOUT_STATE (default ./.orca-fanout/<run>).
 # bash 3.2 compatible (stock macOS).
 set -u
+HERE=$(cd "$(dirname "$0")" && pwd)
 T0=$(date +%s); el() { echo "+$(( $(date +%s)-T0 ))s"; }
 j() { python3 -c "$1" "${@:2}" 2>/dev/null; }
 
@@ -26,18 +27,27 @@ else
   ST=${ORCA_FANOUT_STATE:-./.orca-fanout/$RUN}; mkdir -p "$ST"; echo "$RUN" > "$ST/run"; : > "$ST/map"
   echo "run $RUN  state $ST"
 
-  # dsh drops the Enter Orca sends right after pasting a fresh launch prompt, so the prompt sits in
-  # its composer as a collapsed `▸ N lines・M chars` chip and the worker never starts (while
-  # worker-start still reports input_accepted). A chip seen on two reads 2s apart was never
-  # submitted — a submitted prompt leaves the composer — so one Enter is safe.
-  nudge_dsh() {
-    local h=$1 seen=0 i
-    for i in $(seq 15); do
-      sleep 2
-      if orca terminal read --terminal "$h" --screen --json 2>/dev/null | grep -qE '▸ [0-9]+ lines・[0-9]+ chars・'; then
-        seen=$((seen+1))
-        if [ $seen -ge 2 ]; then orca terminal send --terminal "$h" --enter --json >/dev/null 2>&1; echo "$(el) dsh: launch prompt was not submitted, sent Enter"; return; fi
-      elif [ $seen -ge 1 ]; then return; fi
+  # Clear the two known launch blockers until the task is visibly running (screen_state.py, kept
+  # identical to orca-handoff's copy). dsh: Orca can type the prompt before dsh's TUI is up, dsh
+  # then holds it in its input box and the Enter is lost, while worker-start still reports
+  # input_accepted. Enter goes once the box content is stable across two reads; text still in
+  # the box means nothing was submitted, so a retry cannot start the task twice (max 4).
+  # grok: its folder-trust dialog in a repo with project hooks; the user chose this workspace.
+  unblock() { # handle specfile agent
+    local h=$1 spec=$2 agent=$3 st last="" enters=0 trusted=0 i
+    for i in $(seq 40); do
+      sleep 1.5
+      st=$(orca terminal read --terminal "$h" --screen --json 2>/dev/null | python3 "$HERE/screen_state.py" "$spec" "$agent")
+      case $st in
+        STARTED) return ;;
+        TRUST) [ $trusted = 0 ] && { orca terminal send --terminal "$h" --text y --json >/dev/null 2>&1; trusted=1; echo "$(el) $agent: answered grok folder-trust prompt (y)"; } ;;
+        PENDING:*)
+          if [ "$st" = "$last" ] && [ $enters -lt 4 ]; then
+            orca terminal send --terminal "$h" --enter --json >/dev/null 2>&1; enters=$((enters+1)); st=""
+            echo "$(el) $agent: task was left unsubmitted, sent Enter (#$enters)"
+          fi ;;
+      esac
+      last=$st
     done
   }
 
@@ -47,11 +57,11 @@ else
     [ -s "$spec" ] || { echo "missing spec $spec"; exit 64; }
     ( orca orchestration worker-start --run "$RUN" --spec "$(cat "$spec")" --task-title "$agent: $(basename "$spec")" \
         --worktree "path:$WT" --agent "$agent" --json > "$ST/start-$agent.json" 2>/dev/null
-      if [ "$agent" = dsh ]; then
+      if [ "$agent" = dsh ] || [ "$agent" = grok ]; then
         h=$(j 'import json,sys
 r=json.load(open(sys.argv[1])).get("result") or {}
 print(next((e["id"] for e in r.get("effects",[]) if e.get("kind")=="terminal"),""))' "$ST/start-$agent.json")
-        [ -n "$h" ] && nudge_dsh "$h"
+        [ -n "$h" ] && unblock "$h" "$spec" "$agent"
       fi ) &
   done
   for pair in "$@"; do
@@ -109,5 +119,6 @@ r=json.load(sys.stdin).get("result",{}); print(r.get("worker",{}).get("state",""
   fi
   orca orchestration check --run "$RUN" --ack "$did" --json >/dev/null 2>&1
 done
-wait
+# Every dispatch settled, so any screen watcher still running has nothing left to unblock.
+{ kill $(jobs -p); wait; } 2>/dev/null
 echo "all settled in $(( $(date +%s)-T0 ))s (run $RUN)"

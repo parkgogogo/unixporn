@@ -11,7 +11,8 @@ description: 通过 Orca 把一批任务同时派给多个 agent（Codex、Grok�
 
 - **Codex、Grok、DSH 都是 Orca 内置 agent。** 一律用 `worker-start --agent <id>` 启动，id 分别是 `codex`、`grok`、`dsh`，不要先 `terminal create` 再用 `--terminal` 接入。用 `--agent` 启动时，终端由 Orca 创建，`worker-release` 时会自动关闭并存档对话记录。手动开的终端 release 后只会被标记为 `retained / external_terminal`，标签页会一直留着。
 - **`--agent dsh` 实际运行的是 `dsh-tui .`，用的是 `dsh-tui` profile，也就是 parkgogogo/dsh-TUI 的 fork。** 手动输入 `dsh tui` 用的是另一个 profile `tui`。
-- **dsh 会丢掉 Orca 发出的第一个回车。** 新启动的 dsh 收到粘贴进来的任务后，任务停在输入框里，显示成折叠的 `▸ 90 lines・5300 chars・…`，不会自动提交。`worker-start` 仍然返回 `input_accepted`，因为 Orca 把“已粘贴、尚未开始”也算作已接收，所以单看回执发现不了。脚本会检查屏幕：两次读取（间隔 2 秒）都还看到这个折叠块，就补发一次回车。
+- **dsh 收不到 Orca 发出的回车。** Orca 在 dsh 界面还没起来时，就把任务敲进了终端（很可能是因为提示符 `❯` 和 dsh 输入框的 `❯` 长得一样）。dsh 启动后把这段文字收进输入框，提示「DSH is still starting — press Enter to send once it is ready」，而 Orca 那一下回车已经在启动过程中丢掉了。`worker-start` 仍然返回 `input_accepted`，因为 Orca 把“已粘贴、尚未开始”也算作已接收，所以单看回执发现不了。脚本会盯着屏幕（`scripts/screen_state.py`）：输入框里的内容连续两次读取都没变，就补发回车；文字还在框里说明还没提交，所以重试不会让任务跑两遍，最多补 4 次。
+- **grok 在带项目 hooks 的仓库里会先弹「Do you trust the contents of this directory?」**，不答就一直停在那里。工作目录是用户自己选的，脚本会回答 `y`，grok 把决定记进 `~/.grok/trusted_folders.toml`，同一个仓库以后不再问。
 - **`input_accepted` 不代表 agent 已经开始干活。** 只有 `worker_done` 才算完成，或者 `worker-show` 里 `worker.state` 变成 `failed`。
 - **worker 进程死掉（比如终端被关掉）时，不会有任何消息送到。** 一直 `check --wait` 会永远等下去。脚本每 30 秒没有新消息时，会用 `worker-show` 检查各个 worker，发现 `failed` 或 `stopped` 就记为失败并从等待列表中移除。
 - 不在 Orca 终端里运行时（`orca status --json` 里 `caller` 为 `null`），`check` 必须带 `--run <run_id>`。
@@ -30,7 +31,7 @@ description: 通过 Orca 把一批任务同时派给多个 agent（Codex、Grok�
 
    ```text
    run run_375e667079c6  state ./.orca-fanout/run_375e667079c6
-   +8s dsh: launch prompt was not submitted, sent Enter
+   +10s dsh: task was left unsubmitted, sent Enter (#1)
    +15s started codex ctx_…
    +15s started grok ctx_…
    +15s started dsh ctx_…
@@ -53,7 +54,7 @@ description: 通过 Orca 把一批任务同时派给多个 agent（Codex、Grok�
 |---|---|
 | 手动 `terminal create` 打开 grok 和 `dsh tui`，再用 `--terminal` 接入，协调者逐步执行命令 | 能完成，但 grok 和 dsh 的标签页一直留着，协调者要花好几轮操作 |
 | 全部用 `--agent`，没有补发回车 | codex 21 秒、grok 34 秒完成；dsh 一直卡在输入框，等待也不会结束 |
-| 本脚本 | 三个全部完成，从建 Run 到全部收尾共 43 秒，所有终端都已关闭 |
+| 本脚本 | 三个全部完成，从建 Run 到全部收尾 40–43 秒，所有终端都已关闭 |
 
 ## 安装
 
@@ -61,4 +62,4 @@ description: 通过 Orca 把一批任务同时派给多个 agent（Codex、Grok�
 ln -s ~/labs/unixporn/Orca/Skills/orca-delegate ~/.claude/skills/orca-delegate
 ```
 
-依赖：Orca 正在运行，`orca` 在 PATH 里，有 `python3`。脚本兼容 macOS 自带的 bash 3.2。完整的编排规范以 `orca skills get orchestration` 输出的版本为准，本 skill 只覆盖“并行派单，再等全部结束”这一种流程。
+依赖：Orca 正在运行，`orca` 在 PATH 里，有 `python3`。脚本兼容 macOS 自带的 bash 3.2。完整的编排规范以 `orca skills get orchestration` 输出的版本为准，本 skill 只覆盖“在同一个工作目录里并行派单，再等全部结束”这一种流程。要把任务交给其他 workspace 里的 agent、自己不等结果，用同级目录的 [`orca-handoff`](../orca-handoff/SKILL.md)。

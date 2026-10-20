@@ -152,3 +152,4 @@ cp ~/.p10k.zsh p10k.zsh
 | Skill | 用途 |
 |---|---|
 | [`orca-delegate`](Skills/orca-delegate/SKILL.md) | 一条命令把任务并行派给 Codex、Grok、DSH 等 agent，等全部结束后自动回收终端；绕开 dsh 丢回车、worker 死掉后空等等坑 |
+| [`orca-handoff`](Skills/orca-handoff/SKILL.md) | 把任务交接给其他 workspace（已有目录或新建 worktree）里的 Codex、Grok、DSH，确认对方已开工就返回，不等结果；自动处理 dsh 丢回车、grok 目录信任提示 |
