@@ -143,20 +143,21 @@ dsh-tui 进程
 node orca-bridge/install.mjs
 ```
 
-它做三件事，都可以撤销：在 `~/.dsh/profiles/dsh-tui/cordis.patch.yml` 末尾加一段带标记的配置加载插件（原来的内容不动；新 profile 的 `[]` 会被去掉，卸载时放回）；建两个软链接 `~/.local/bin/orca-dsh` 和 `orca-dsh-sync`；先把已有会话镜像一遍。期望输出：
+它做三件事，都可以撤销：在 `~/.dsh/profiles/dsh-tui/cordis.patch.yml` 末尾加一段带标记的配置加载插件（原来的内容不动；新 profile 的 `[]` 会被去掉，卸载时放回）；建三个软链接 `~/.local/bin/orca-dsh`、`orca-dsh-sync` 和 `prime-agent`（指向 `orca-dsh`）；先把已有会话镜像一遍。期望输出：
 
 ```text
 ✓ ~/.dsh/profiles/dsh-tui/cordis.patch.yml: loads …/orca-bridge/index.js
 ✓ ~/.local/bin/orca-dsh, orca-dsh-sync
+✓ ~/.local/bin/prime-agent -> orca-dsh (Orca now detects Prime Agent)
 ✓ mirrored: 135 written, 0 unchanged, 0 skipped, 0 removed, 0 failed
-✗ Orca: Prime Agent command is not set
+✓ Orca: Prime Agent runs the prime-agent shim (resume from Session History opens DSH)
 ✓ Orca: its own DSH status hook is not installed; the plugin sends every status event itself
 ```
 
 然后：
 
 1. 重启正在运行的 dsh-tui，插件在启动时加载。
-2. 在 Orca 里打开 **Settings → Agents → Prime Agent**，把 **Command** 设成 `orca-dsh`。整个方案只有这一步要动 Orca 的设置：Orca 恢复 Prime Agent 会话时执行 `cd <目录> && <Command> --resume <镜像文件>`，`orca-dsh` 把它换成 `dsh-tui --backend=dsh --resume <DSH 会话 id>`（固定 `--backend=dsh`，因为 dsh-tui 会记住上次选的后端）。不设也能列出和搜索，只是点恢复会去找不存在的 `prime-agent`。Orca 的设置存在 SQLite 里，运行时直接改文件会被覆盖，所以只能在界面里改。
+2. 在 Orca 的 **Settings → Agents** 里点 Refresh（或重启 Orca），Prime Agent 会变成已安装。不用改任何设置：Orca 恢复 Prime Agent 会话时执行 `cd <目录> && prime-agent --resume <镜像文件>`，`prime-agent` 这个软链接就是 `orca-dsh`，它换成 `dsh-tui --backend=dsh --resume <DSH 会话 id>`（固定 `--backend=dsh`，因为 dsh-tui 会记住上次选的后端）。为什么要这个软链接：Orca 只给 `<命令> --version` 能跑通的 agent 显示 Command 设置，没装 Prime Agent 时这个设置根本不出现。如果 PATH 上已经有真的 `prime-agent`，install 不建软链接，这时到 Prime Agent 的 Command 里填 `orca-dsh`。副作用：在 Orca 里新开 Prime Agent 打开的也是 DSH。
 3. 可选：重启一次 Orca，让它装上自己的 DSH hook，插件会自动切到补充模式。不重启也完全能用。
 
 只要一半：`node orca-bridge/install.mjs --no-mirror`（只同步状态）或 `--no-status`（只同步历史）。重跑 install 时要带上同样的参数，否则这一段会被写回默认值。
@@ -169,7 +170,7 @@ DSH-TUI 升级不影响插件：`install-fork.sh` 和 TUI 里的 `/update` 只�
 node orca-bridge/install.mjs status
 ```
 
-前三行和最后一行是 `✓`，Prime Agent 那行在第 2 步之后变成 `✓`。然后在 Orca 里新开一个 DSH，发「用 bash 运行 `echo hi`，然后只回复：好了」：
+每一行都是 `✓`。然后在 Orca 里新开一个 DSH，发「用 bash 运行 `echo hi`，然后只回复：好了」：
 
 - 运行中侧栏是「工作中」，工具显示 `bash echo hi`；结束后是「完成」，预览是「好了」，不是 `hi`。
 - 几秒后 Orca 的 Session History 里多一条 Prime Agent 记录，标题是这句话；`orca search --agent prime-agent "echo hi"` 能搜到。点恢复，打开的是 DSH，回到这个会话。
@@ -179,7 +180,7 @@ node orca-bridge/install.mjs status
 
 | 命令 | 作用 |
 |---|---|
-| `node orca-bridge/install.mjs status` | 逐项检查：patch 段、软链接、镜像数、Orca 的 Prime Agent 设置、Orca 自己的 DSH hook |
+| `node orca-bridge/install.mjs status` | 逐项检查：patch 段、软链接（含 `prime-agent`）、镜像数、Orca 的 Prime Agent 设置、Orca 自己的 DSH hook |
 | `orca-dsh-sync` | 手动同步一次，打印结果 |
 | `orca-dsh-sync status` | 目录、镜像数、最近几行日志（`~/.dsh-orca-bridge/sync.log`，只记有变化或失败的） |
 | `orca-dsh-sync purge` | 删掉所有镜像（插件还在的话，下次同步会重建） |
@@ -203,7 +204,7 @@ node orca-bridge/install.mjs status
 node orca-bridge/install.mjs uninstall --purge   # 去掉 patch 段和软链接；--purge 同时删除镜像和 ~/.dsh-orca-bridge
 ```
 
-然后重启 dsh-tui，并在 Orca 里清空 Prime Agent 的 Command。
+然后重启 dsh-tui；如果在 Orca 里给 Prime Agent 填过 Command，清空它。
 
 ### 开发
 

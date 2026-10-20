@@ -9,9 +9,12 @@
 //
 // Install touches three things, all reversible:
 //   1. a marked block in $DSH_HOME/profiles/<profile>/cordis.patch.yml that loads index.js
-//   2. symlinks ~/.local/bin/orca-dsh and ~/.local/bin/orca-dsh-sync
+//   2. symlinks ~/.local/bin/orca-dsh, orca-dsh-sync and prime-agent (-> orca-dsh)
 //   3. mirrors under ~/.prime/agent/sessions (state in ~/.dsh-orca-bridge)
-// Orca itself is not modified; one setting is changed by hand (printed at the end).
+// Orca itself is not modified. Orca only lists an agent (and offers its Command setting) once
+// `<cli> --version` runs, and resumes Prime Agent rows with `prime-agent --resume <file>`; the
+// prime-agent shim covers both, so no Orca setting is needed. It is skipped when a real
+// prime-agent CLI is on PATH; then set Settings → Agents → Prime Agent → Command to orca-dsh.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -23,6 +26,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ENTRY = path.join(HERE, 'index.js');
 const BIN_DIR = path.join(os.homedir(), '.local', 'bin');
 const BINS = { 'orca-dsh': 'bin/orca-dsh.js', 'orca-dsh-sync': 'bin/orca-dsh-sync.js' };
+// Stands in for the prime-agent CLI so Orca detects the slot the mirrors live in.
+const SHIM = { name: 'prime-agent', target: 'bin/orca-dsh.js' };
 const START = '# >>> dsh-orca-bridge (managed by unixporn/DSH-TUI/orca-bridge/install.mjs) >>>';
 const END = '# <<< dsh-orca-bridge <<<';
 
@@ -173,6 +178,43 @@ function binsLinked() {
   });
 }
 
+function shimLinked() {
+  try {
+    return fs.readlinkSync(path.join(BIN_DIR, SHIM.name)) === path.join(HERE, SHIM.target);
+  } catch {
+    return false;
+  }
+}
+
+// Another prime-agent on PATH (the real CLI) wins over the shim.
+function otherPrimeAgent() {
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    const file = path.join(dir, SHIM.name);
+    if (!dir || file === path.join(BIN_DIR, SHIM.name)) continue;
+    try {
+      fs.accessSync(file, fs.constants.X_OK);
+      return file;
+    } catch {}
+  }
+  try {
+    if (!fs.lstatSync(path.join(BIN_DIR, SHIM.name)).isSymbolicLink()) return path.join(BIN_DIR, SHIM.name);
+  } catch {}
+  return null;
+}
+
+function linkShim() {
+  const other = otherPrimeAgent();
+  if (other) return other;
+  const link = path.join(BIN_DIR, SHIM.name);
+  try {
+    fs.unlinkSync(link);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  fs.symlinkSync(path.join(HERE, SHIM.target), link);
+  return null;
+}
+
 async function install() {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 15)) throw new Error(`Node ${process.versions.node}: need 22.15+ for zstd`);
@@ -182,6 +224,9 @@ async function install() {
   ok(`${patchFile}: loads ${ENTRY}`);
   linkBins();
   ok(`${BIN_DIR}/orca-dsh, orca-dsh-sync`);
+  const other = linkShim();
+  if (other) note(`prime-agent shim skipped: ${other} is a real prime-agent`);
+  else ok(`${BIN_DIR}/prime-agent -> orca-dsh (Orca now detects Prime Agent)`);
   if (!flag('--no-mirror')) {
     const { syncOnce } = await import('./lib/sync.js');
     const s = syncOnce();
@@ -198,7 +243,8 @@ async function uninstall() {
     ok(`removed the block from ${patchFile}`);
   }
   unlinkBins();
-  ok('removed the orca-dsh symlinks');
+  if (shimLinked()) fs.unlinkSync(path.join(BIN_DIR, SHIM.name));
+  ok('removed the orca-dsh and prime-agent symlinks');
   if (flag('--purge')) {
     const { removeAllMirrors } = await import('./lib/sync.js');
     ok(`removed ${removeAllMirrors()} mirrors`);
@@ -210,10 +256,13 @@ async function uninstall() {
 function report() {
   const command = orcaPrimeAgentCommand();
   if (command === 'orca-dsh' || command?.endsWith('/orca-dsh')) ok('Orca: Prime Agent command is orca-dsh (resume from Session History opens DSH)');
-  else {
-    bad(`Orca: Prime Agent command is ${command ? `"${command}"` : 'not set'}`);
+  else if (!command && shimLinked()) {
+    ok('Orca: Prime Agent runs the prime-agent shim (resume from Session History opens DSH)');
+    note('If Orca still lists Prime Agent as not installed, press Refresh in Settings → Agents.');
+  } else {
+    bad(`Orca: Prime Agent command is ${command ? `"${command}"` : 'not set'} and the prime-agent shim is not installed`);
     note('Set Settings → Agents → Prime Agent → Command to `orca-dsh`, otherwise resuming a');
-    note('mirrored session from Session History starts the (missing) prime-agent CLI.');
+    note('mirrored session from Session History starts the prime-agent CLI, not DSH.');
   }
   if (orcaHookRowInstalled()) ok("Orca: its own DSH status hook is installed; the plugin adds approvals, reply text and error Stops");
   else {
@@ -225,6 +274,8 @@ function report() {
 async function status() {
   (patchInstalled() ? ok : bad)(`${patchFile}: ${patchInstalled() ? 'loads' : 'does not load'} the plugin`);
   (binsLinked() ? ok : bad)(`${BIN_DIR}/orca-dsh, orca-dsh-sync ${binsLinked() ? 'linked' : 'missing'}`);
+  if (shimLinked()) ok(`${BIN_DIR}/prime-agent -> orca-dsh`);
+  else note(`prime-agent shim not installed${otherPrimeAgent() ? ` (${otherPrimeAgent()} is a real prime-agent)` : ''}`);
   const { listMirrorFiles, isOurMirror, listSessionFiles } = await import('./lib/sync.js');
   ok(`mirrors: ${listMirrorFiles().filter(isOurMirror).length} for ${listSessionFiles().length} DSH session logs`);
   report();
