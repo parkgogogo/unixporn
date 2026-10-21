@@ -82,7 +82,48 @@ node apply.mjs check
 
 三行都是 `✓`。然后启动 `dsh-tui`，运行 `/theme status`，显示 `Current theme claude-dark-1e1e1e`。
 
-最后让 agent 跑一条有多行输出的命令，比如发一句「用 bash 运行 `sleep 3; seq 1 50`，然后只回复 ok」：运行中只看到一行 `Running 1 shell command…`，结束后变成 `Ran 1 shell command`，没有输出内容；点一下这一行展开成带输出的卡片，再点收回。再发一个需要思考的问题，思考时只出现 `⠼ Thinking…`。最后发「用 bash 依次单独运行 pwd、ls、echo hi，每条一次工具调用，然后回复 ok」：三条命令折成一行 `Ran 3 shell commands`，`Ctrl+O` 能展开成三张卡片。
+最后让 agent 跑一条有多行输出的命令，比如发一句「用 bash 运行 `sleep 3; seq 1 50`，然后只回复 ok」：运行中是两行 `Running 1 shell command…` 和 `⎿  $ sleep 3; seq 1 50`，结束后第一行变成 `Ran 1 shell command`，没有输出内容；点一下展开成带输出的卡片，再点收回。回答下面空一行是 `✻ Worked for 4s`。再发一个需要思考的问题，输入框上方那一行里滚动显示思考内容，右边有 `tok/s`。最后发「用 bash 依次单独运行 pwd、ls、echo hi，每条一次工具调用，然后回复 ok」：三条命令折成 `Ran 3 shell commands` 加 `⎿  $ echo hi` 两行，`Ctrl+O` 能展开成三张卡片。
+
+## 2.5 模型：OpenCode Go 订阅
+
+dsh 默认走 DeepSeek 官方接口，密钥读环境变量 `DEEPSEEK_API_KEY`。我们改成 OpenCode Go 订阅，密钥存进 dsh 自己的凭据文件，不用环境变量。dsh 自带的 `dsh-llm-pi-ai` 已经内置了 `opencode-go` 这条路由（`https://opencode.ai/zen/go`，DeepSeek、Kimi、GLM、Qwen、MiniMax 等 30 个模型），只要给它密钥、把默认模型切过去。
+
+1. 把 OpenCode Go 的 API key 写进 `~/.dsh/.credentials.yaml`，权限必须是 600（别人能读的文件 dsh 会拒绝加载）。密钥不要进这个仓库：
+
+   ```sh
+   umask 077
+   printf 'version: 1\nrefs:\n  OPENCODE_API_KEY: %s\n' '<你的 oc_sk_… key>' > ~/.dsh/.credentials.yaml
+   ```
+
+2. 在 `~/.dsh/cordis.patch.yml` 末尾追加下面这段。这是全局那一层，`dsh-tui`、`tui`、`headless` 三个 profile 都生效；文件开头 Orca 管理的那段不要动：
+
+   ```yaml
+   # >>> opencode-go (OpenCode Go subscription; key in ~/.dsh/.credentials.yaml) >>>
+   - id: llm-pi-ai
+     config:
+       providers:
+         opencode-go:
+           displayName: OpenCode Go
+           apiKeyEnv: OPENCODE_API_KEY
+   - id: agent-default-model
+     config:
+       provider: opencode-go
+       model: deepseek-v4.1-flash
+   # <<< opencode-go <<<
+   ```
+
+   `apiKeyEnv` 只是凭据的名字，dsh 按「启动时的环境变量 → 凭据文件 → `.env`」的顺序找，环境里没有 `OPENCODE_API_KEY`，就用凭据文件里的。`deepseek-v4.1-flash` 和官方的 `deepseek-flash` 是同一个模型（DeepSeek V4.1 Flash）。
+
+**验证：**
+
+```sh
+dsh --profile dsh-tui --dump-config | grep -A5 'id: agent-default-model'   # provider: opencode-go
+env -u DEEPSEEK_API_KEY dsh headless "Reply with exactly the word pong."   # 打印 pong
+```
+
+再开 `dsh-tui`：状态栏的模型是 `deepseek-v4.1-flash`，不再有 `≈¥` 费用估算；`/model` 里有「OpenCode Go」一栏，可以换别的模型和推理强度。
+
+还会用 `DEEPSEEK_API_KEY` 的：`/model` 里的「DeepSeek」那一栏，和网页搜索工具（`web-search-deepseek`，DeepSeek 自己的搜索接口，OpenCode Go 没有）。`~/.zshrc` 里不 export 它，这两样就不能用，其它不受影响。
 
 ## 3. 撤销
 
