@@ -30,7 +30,7 @@
 
 | 层 | 管什么 | 来源 | 装到哪里 |
 |---|---|---|---|
-| dsh-TUI 本体 | 用 fork 版：多了 `compactTools` 设置和 `thinkingFold: status` 选项 | [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，`install-fork.sh` 编译安装 | `~/.dsh/profiles/dsh-tui` |
+| dsh-TUI 本体 | 用 fork 版：多了 `compactTools`、`workingLine`、`turnDuration`、`sidePanel.escCloses` 设置和 `thinkingFold: status` 选项 | [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，`install-fork.sh` 编译安装 | `~/.dsh/profiles/dsh-tui` |
 | `/settings` 选项 | 极简界面、关掉开屏、紧凑工具卡、Think 只显示状态等 | `settings.json` | 合并进 `~/.dsh-tui/settings.json` |
 | 配色主题 | Claude Dark (1e1e1e) | `claude-dark-1e1e1e.json` | `~/.dsh-tui/themes/`，并在 `~/.dsh-tui/theme.json` 里选中 |
 | Orca 集成 | Orca 里的 DSH 状态和会话历史（见第 4 节） | `orca-bridge/`，`node orca-bridge/install.mjs` 安装 | `~/.dsh/profiles/dsh-tui/cordis.patch.yml` 里的一段 |
@@ -92,7 +92,7 @@ node apply.mjs check
 dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui
 ```
 
-原版不认识 `compactTools` 和 `thinkingFold: status`，会按默认值显示。设置和主题在 dsh-TUI 里用 `/settings` 和 `/theme` 改回去就行；`/settings` 里「极简界面」关掉之后，`settings.json` 里的 `statusBar` 那一组选项才会生效。
+原版不认识 `compactTools`、`workingLine`、`turnDuration`、`sidePanel.escCloses` 和 `thinkingFold: status`，会按默认值显示。设置和主题在 dsh-TUI 里用 `/settings` 和 `/theme` 改回去就行；`/settings` 里「极简界面」关掉之后，`settings.json` 里的 `statusBar` 那一组选项才会生效。
 
 ## 4. 接入 Orca：状态和会话历史
 
@@ -227,9 +227,12 @@ cd orca-bridge && npm test
 | `whale` / `whaleIdle` | `false` | 关掉吉祥物和它的待机动画 |
 | `recapOnOpen` | `false` | 打开会话时不自动生成摘要 |
 | `turnUsageRow` | `false` | 每轮结束时不显示 token 用量行 |
+| `turnDuration` | `true` | fork 才有。每轮结束时一行 `✻ Worked for 12s`（中文界面「用时 12s」），被中断的回合不显示 |
 | `foldTerminalCommand` | `true` | 多行命令只显示第一行加 `+N lines` |
-| `compactTools` | `true` | fork 才有。紧凑工具卡：Bash 和读图片只剩一行；连续的 Bash/读文件/搜索折成一行摘要，详见下一节 |
+| `compactTools` | `true` | fork 才有。紧凑工具卡：Bash 和读图片只剩一行；连续的 Bash/读文件/搜索折成两行摘要（一句计数加 `⎿` 最近一次调用），详见下一节 |
 | `thinkingFold` | `status` | fork 才有 `status` 这个值：Think 只显示转圈和耗时，不显示思考文字，也不显示 `(ctrl+o to expand)` |
+| `workingLine` | `ticker` | fork 才有。输入框上方那一行：思考的最新内容在动词后面滚动，右边是用时 · 输出 token · 本回合生成速度 `tok/s` |
+| `sidePanel.panels` / `sidePanel.escCloses` | `btw` / `true` | 右栏只留 btw 一个面板；`escCloses` 是 fork 才有的，在右栏里（包括 `/btw` 输入框）按一次 Esc 就关掉右栏 |
 | `jobGroupFold` | `always` | 两个以上连续的后台任务就合成一组 |
 | `toolBackground` | `none` | 工具卡片不加底色 |
 | `codeFrameStyle` | `light` | 代码块只有左侧竖线，没有封闭边框 |
@@ -239,14 +242,14 @@ cd orca-bridge && npm test
 
 ## fork 改了什么
 
-改动都在 [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，是上游 `main` 之上的四个提交（`feat(transcript): compactTools setting and thinkingFold "status"`、`fix(transcript): grow compact tool runs in place`、`fix(transcript): one summary-line shape from a run's first call`、`feat(transcript): compact tool runs read as one plain sentence`），改动在 `src/`，加一个构建检查 `verify:tool-group`，按上游规矩过了 `pnpm build` 的全部检查。两个新东西都是 `/settings` 里的正式选项，默认关，`settings.json` 打开。
+改动都在 [parkgogogo/dsh-TUI](https://github.com/parkgogogo/dsh-TUI) 的 `unixporn` 分支，是上游 `main` 之上的五个提交（`feat(transcript): compactTools setting and thinkingFold "status"`、`fix(transcript): grow compact tool runs in place`、`fix(transcript): one summary-line shape from a run's first call`、`feat(transcript): compact tool runs read as one plain sentence`、`feat: two-line tool runs, ticker working line, turn duration, Esc closes side panel`），改动在 `src/`，加一个构建检查 `verify:tool-group`，按上游规矩过了 `pnpm build` 的全部检查。新东西都是 `/settings` 里的正式选项，默认关，`settings.json` 打开。
 
 `compactTools`（新文件 `src/components/Chat/ToolGroup.tsx`，加上 `MessageList.tsx`、`AssistantToolUseMessage.tsx` 和设置的接线）：
 
 1. 终端卡（Bash/PowerShell）收起时只剩标题一行：运行中不滚动输出，结束后不显示输出，耗时在标题右边计时；命令很长时截断成一行，耗时不会被挤到第二行。
 2. `read_image` 收起时也只剩一行，不显示给模型看的 `<path>…<type>image</type>…` 文本，也不显示缩略图（没有图形协议的终端里那是一块 12 行的空白）。
 3. 读文件、搜索、终端调用（`toolGroupable`：卡片类型是 terminal、read、search，或工具名在 `GROUPABLE_TOOL_NAMES` 里）从第一次调用起就画成摘要行，单独一次也是一组，所以第二次调用来的时候这一行只是计数加一，样子不变。之前单独一次时画的是卡片 `• Bash(ls)`，第二次一来就换成摘要，并行调用时几十毫秒内换掉，看起来就是闪一下。
-4. 连续的调用合成一组，调用之后的 Think 也收进组里（结尾的也收；它单独画会先挂在摘要下面，下一次调用一来又被收走，也是闪）。组头是一句话，按种类计数（`Read 2 files, ran 1 shell command`，文案在 `i18n.ts` 的 `tool-run-*`，中文界面是「读取了 2 个文件，运行了 1 条命令」）；还有调用在跑的种类用进行时、句末加 `…`。
+4. 连续的调用合成一组，调用之后的 Think 也收进组里（结尾的也收；它单独画会先挂在摘要下面，下一次调用一来又被收走，也是闪）。组头是一句话，按种类计数（`Read 2 files, ran 1 shell command`，文案在 `i18n.ts` 的 `tool-run-*`，中文界面是「读取了 2 个文件，运行了 1 条命令」）；还有调用在跑的种类用进行时、句末加 `…`。下面固定一行 `⎿  $ cat x.txt` 写最近一次调用（命令写成 `$ 第一行`，其它用卡片标题，当前目录下的路径写成相对路径）。从第一次调用起就是这两行，之后只改字不改行数。
 5. 报错、非零退出码、被信号杀掉的命令照常显示错误内容，也不进组；改文件（diff）、todo、提问、子 agent 和 agent 的文字会把组断开。
 6. 点组头或 `Ctrl+O` 展开；展开后卡片、输出和图片都照常显示。单独一次的调用展开后直接是那张卡片，再点卡片收回。
 7. 模型在两次调用之间先发出一段空回复时，不再画一个孤零零的 `●`（底部的转圈状态已经说明它在干活）；真有文字到了才显示。
@@ -255,6 +258,12 @@ cd orca-bridge && npm test
 `thinkingFold: status`（`AssistantThinkingMessage.tsx`、`MessageList.tsx`）：Think 行只有转圈加 `Thinking…`，结束后是 `* Thinking`，不显示思考文字和 `(ctrl+o to expand)`；`Ctrl+O` 照样能看全文。
 
 顺带：极简界面下 Think 的转圈用主题强调色（Claude 橙），上游是去掉颜色。
+
+`workingLine: ticker`（`Spinner/SpinnerAnimationRow.tsx`、`Chat.tsx`）：输入框上方那一行变成「转圈 动词… 思考的最新内容 …… 用时 · ↓ 输出 token · N tok/s」。思考内容取正在流式输出的那段 Think 的结尾，宽度不够时从左边截掉，所以新字进来就往左滚；不在思考时那一段留空。`tok/s` 是 `channel.tps`（本回合的解码速度，原本只在底栏显示），回合刚开始时还是上一轮的数，所以要等本轮测出来才显示。去掉了上游计数前面那个表示方向的箭头（原来会显示成 `↓ ↑ 7k`）。
+
+`turnDuration`（`MessageList.tsx`）：用上游每轮结束时本来就记下的 turn-summary 行，不开 `turnUsageRow` 时画成 `✻ Worked for 12s`。
+
+`sidePanel.escCloses`（`sidePanel/useSidePanel.ts`）：右栏有焦点时 Esc 先由宿主接住，直接关掉右栏、焦点回对话。上游是第一下 Esc 从 btw 输入框退到列表，第二下才回对话，右栏一直开着。
 
 ## 升级 dsh-TUI
 

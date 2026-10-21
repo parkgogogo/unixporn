@@ -32,5 +32,11 @@
     "activity": false,
     "trajectory": false,
     "shortcutHint": false
+  },
+  "workingLine": "ticker",
+  "turnDuration": true,
+  "sidePanel": {
+    "escCloses": true,
+    "panels": "btw"
   }
 }

@@ -27,7 +27,10 @@ while i < len(data):
 
 screen = pyte.Screen(cols, rows)
 stream = pyte.ByteStream(screen)
-SPIN = re.compile(r'^\s*[·•●✻✽✶✳✢*⠁-⣿]\s+\S+…\s*\(')
+# The working line above the prompt: classic `· Verb… (3s · …)` or ticker
+# `· Verb… …newest thought   3s · 52 tok/s` (one leading space; the
+# transcript's thinking row is indented two).
+SPIN = re.compile(r'^\s*[·•●✻✽✶✳✢*⠁-⣿]\s+\S+…\s*\(|^ [·•●✻✽✶✳✢*]\s+\S+…(\s|$)')
 SUMMARY = r'(Ran|Running|Read|Reading|Viewed|Viewing|Searched for|Searching for|Listed|Listing|Fetched|Fetching) \d|(运行了|正在运行|读取了|正在读取|查看了|正在查看|搜索了|正在搜索|列出了|正在列出|进行了|正在进行|抓取了|正在抓取) ?\d'
 TOOL = re.compile(r'^\s*(▸|▾|[•⏺●✗]\s+[A-Z][\w ]*[( ]|⎿|\* Thinking|[⠁-⣿] Thinking|' + SUMMARY + ')')
 CARD = re.compile(r'^\s*[•⏺●]?\s*[A-Z][A-Za-z ]*\(.*\)( · \d+(ms|s|m))?$')
