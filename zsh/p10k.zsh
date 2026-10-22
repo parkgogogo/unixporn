@@ -34,8 +34,10 @@
   typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(
     # =========================[ Line #1 ]=========================
     # os_icon               # os identifier
-    dir                     # current directory
+    cwd                     # current directory (custom, see prompt_cwd)
     vcs                     # git status
+    # =========================[ Line #2 ]=========================
+    newline                 # \n
     prompt_char             # prompt symbol
   )
 
@@ -111,6 +113,8 @@
     # battery               # internal battery
     # wifi                  # wifi speed
     # example               # example user-defined segment (see prompt_example function below)
+    # =========================[ Line #2 ]=========================
+    newline                 # \n
   )
 
   # Defines character set used by powerlevel10k. It's best to let `p10k configure` set it for you.
@@ -137,13 +141,13 @@
 
   # Connect left prompt lines with these symbols. You'll probably want to use the same color
   # as POWERLEVEL9K_MULTILINE_FIRST_PROMPT_GAP_FOREGROUND below.
-  typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_PREFIX='%244F╭─'
-  typeset -g POWERLEVEL9K_MULTILINE_NEWLINE_PROMPT_PREFIX='%244F├─'
-  typeset -g POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX='%244F╰─'
+  typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_PREFIX='%F{#d97757}✻ '
+  typeset -g POWERLEVEL9K_MULTILINE_NEWLINE_PROMPT_PREFIX=
+  typeset -g POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX=''
   # Connect right prompt lines with these symbols.
-  typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_SUFFIX='%244F─╮'
-  typeset -g POWERLEVEL9K_MULTILINE_NEWLINE_PROMPT_SUFFIX='%244F─┤'
-  typeset -g POWERLEVEL9K_MULTILINE_LAST_PROMPT_SUFFIX='%244F─╯'
+  typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_SUFFIX=
+  typeset -g POWERLEVEL9K_MULTILINE_NEWLINE_PROMPT_SUFFIX=
+  typeset -g POWERLEVEL9K_MULTILINE_LAST_PROMPT_SUFFIX=
 
   # Filler between left and right prompt on the first prompt line. You can set it to ' ', '·' or
   # '─'. The last two make it easier to see the alignment between left and right prompt and to
@@ -196,7 +200,7 @@
   # Transparent background.
   typeset -g POWERLEVEL9K_PROMPT_CHAR_BACKGROUND=
   # Green prompt symbol if the last command succeeded.
-  typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_{VIINS,VICMD,VIVIS,VIOWR}_FOREGROUND='#d97757'
+  typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_{VIINS,VICMD,VIVIS,VIOWR}_FOREGROUND='#b0aea5'
   # Red prompt symbol if the last command failed.
   typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_{VIINS,VICMD,VIVIS,VIOWR}_FOREGROUND='#e5636f'
   # Default prompt symbol.
@@ -1716,6 +1720,64 @@
   # typeset -g POWERLEVEL9K_TIME_VISUAL_IDENTIFIER_EXPANSION='⭐'
   # Custom prefix.
   # typeset -g POWERLEVEL9K_TIME_PREFIX='at '
+
+  ####################[ cwd: full path with highlights (replaces the dir segment) ]####################
+  # ~/labs/orca/src/main/ipc          parents dim, git repo root bright, current dir orange
+  # ~/labs/orca/…/handlers/terminal   folded from the left only when it doesn't fit the pane;
+  #                                   the first part, the repo root and the current dir always stay
+  typeset -g POWERLEVEL9K_CWD_PARENT_COLOR='#787878'
+  typeset -g POWERLEVEL9K_CWD_REPO_COLOR='#e8e6dc'
+  typeset -g POWERLEVEL9K_CWD_LEAF_COLOR='#d97757'
+  # Columns kept free for git status and the right prompt.
+  typeset -g POWERLEVEL9K_CWD_RESERVE=34
+
+  function prompt_cwd() {
+    local p=${(%):-%~} d=$PWD root= lead=
+    while [[ $d != / && $d != $HOME ]]; do
+      if [[ -e $d/.git ]]; then root=$d; break; fi
+      d=${d:h}
+    done
+    [[ $p == /* ]] && lead=/
+    local -a parts=(${(s:/:)p})
+    local -i n=$#parts ri=0 i budget len
+    [[ -n $root ]] && ri=$(( n - ${#${(s:/:)${PWD#$root}}} ))
+
+    # Keep the first part, the repo root and the current dir; add parents from the
+    # right while they fit.
+    local -A keep=([1]=1 [$n]=1)
+    (( ri > 0 )) && keep[$ri]=1
+    budget=$(( COLUMNS - POWERLEVEL9K_CWD_RESERVE ))
+    (( budget < 16 )) && budget=16
+    for i in ${(k)keep}; do (( len += $#parts[i] + 1 )); done
+    for (( i = n - 1; i > 1; i-- )); do
+      (( $+keep[$i] )) && continue
+      (( len + $#parts[i] + 3 > budget )) && break
+      keep[$i]=1
+      (( len += $#parts[i] + 1 ))
+    done
+
+    local dim="%F{$POWERLEVEL9K_CWD_PARENT_COLOR}" out=$lead gap=
+    (( n )) || out="%B%F{$POWERLEVEL9K_CWD_LEAF_COLOR}/%b"
+    for (( i = 1; i <= n; i++ )); do
+      if (( ! $+keep[$i] )); then
+        [[ -z $gap ]] && out+="$dim…/" gap=1
+        continue
+      fi
+      gap=
+      local name=${parts[i]//\%/%%}
+      if (( i == n )); then
+        out+="%B%F{$POWERLEVEL9K_CWD_LEAF_COLOR}$name%b"
+      elif (( i == ri )); then
+        out+="%B%F{$POWERLEVEL9K_CWD_REPO_COLOR}$name%b$dim/"
+      else
+        out+="$dim$name/"
+      fi
+    done
+    out=${out/#\//$dim/}
+    [[ -w $PWD ]] || out+=" $dim"$'\uF023'
+    p10k segment -b "" -f $POWERLEVEL9K_CWD_LEAF_COLOR -t "$out"
+  }
+  function instant_prompt_cwd() { prompt_cwd; }
 
   # Example of a user-defined prompt segment. Function prompt_example will be called on every
   # prompt if `example` prompt segment is added to POWERLEVEL9K_LEFT_PROMPT_ELEMENTS or

@@ -2,80 +2,33 @@
 
 这是一份写给 agent 的操作手册：在任何一台 Mac 上把终端外观复现成和原机**完全一致**，并在配置变化后把改动写回本仓库。
 
-Orca 本身保持默认设置（暗色模式），只导入一个终端配色主题、改终端字体。外观分三层：
+Orca 本身保持默认设置（暗色模式），只导入一个终端配色主题、改终端字体。外观分四层：
 
 | 层 | 管什么 | 本目录里的文件 |
 |---|---|---|
 | Orca 终端配色 | 终端的背景、文字和 16 色 | `claude-dark-1e1e1e.yaml` |
 | 终端字体 | JetBrains Mono（Nerd Font 版），14 号 | 无文件，在 Orca 设置里填（见第 3 步） |
-| zsh 提示符 | 单行、无背景色块的 Powerlevel10k 提示符 | `p10k.zsh` |
+| zsh 提示符和 Clawd | 两行、无背景色块的 Powerlevel10k 提示符，开终端时 Clawd 跳舞打招呼 | 在 [`../zsh/`](../zsh/README.md)，不在本目录 |
 | Claude Code | Claude Code 自己的 UI 配色 | 无文件，只有一项设置（见第 4 步） |
 
-原机环境：macOS，Orca 1.4.227，zsh 5.9，oh-my-zsh 和 Powerlevel10k（commit `20323d6`）。
+原机环境：macOS，Orca 1.4.227。
 
-规则：覆盖用户的文件之前先备份（`p10k.zsh` 是整份替换）；每一步都按「验证」核对，通过了才算完成。
+规则：每一步都按「验证」核对，通过了才算完成。
 
 ---
 
-## 1. 安装依赖
+## 1. 安装字体
 
 ```sh
 # 终端字体：JetBrains Mono 的 Nerd Font 版，自带提示符要用的图标
 brew install --cask font-jetbrains-mono-nerd-font
-
-# oh-my-zsh（已安装就跳过）
-[ -d ~/.oh-my-zsh ] || sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-
-ZC=${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
-[ -d $ZC/themes/powerlevel10k ] || git clone https://github.com/romkatv/powerlevel10k.git $ZC/themes/powerlevel10k
-[ -d $ZC/plugins/zsh-autosuggestions ] || git clone https://github.com/zsh-users/zsh-autosuggestions $ZC/plugins/zsh-autosuggestions
-[ -d $ZC/plugins/zsh-syntax-highlighting ] || git clone https://github.com/zsh-users/zsh-syntax-highlighting.git $ZC/plugins/zsh-syntax-highlighting
 ```
 
-想和原机逐字一致，可以把 Powerlevel10k 固定到原机版本：`git -C $ZC/themes/powerlevel10k checkout 20323d6f8cd267805a793dafc840d22330653867`。提示符用了 `'#d97757'` 这种十六进制颜色，太旧的 Powerlevel10k 不支持。
+**验证：** `ls ~/Library/Fonts /Library/Fonts | grep JetBrainsMonoNerdFontMono-SemiBold` 有输出。
 
-**验证：** `ls ~/Library/Fonts /Library/Fonts | grep JetBrainsMonoNerdFontMono-SemiBold` 有输出；上面三个目录都存在。
+## 2. zsh 提示符和 Clawd
 
-## 2. zsh 提示符
-
-```sh
-[ -f ~/.p10k.zsh ] && cp ~/.p10k.zsh ~/.p10k.zsh.bak-$(date +%Y%m%d%H%M%S)
-cp p10k.zsh ~/.p10k.zsh
-```
-
-`~/.zshrc` 里必须有下面这些行，缺的补上，已有的不要重复添加：
-
-```zsh
-# 文件最顶部（instant prompt）
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
-source $ZSH/oh-my-zsh.sh
-
-# 文件最底部
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-```
-
-**验证：** 运行下面的命令（启动两次，是为了绕开旧的 instant prompt 缓存）：
-
-```sh
-for i in 1 2; do ( sleep 4; printf 'exit\n' ) | COLORTERM=truecolor TERM=xterm-256color script -q /dev/null zsh -i > /tmp/p10k-check.raw 2>&1; done
-python3 - <<'PY'
-import re
-raw = open("/tmp/p10k-check.raw", "rb").read().decode("utf-8", "replace")
-vis = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[78]|\r", "", raw)
-print([re.sub(" {3,}", " … ", l) for l in vis.split("\n") if "❯" in l])
-print("orange path text:", "38;2;217;119;87m" in raw)
-print("no background blocks:", "\x1b[48;" not in raw)
-print("no frame:", not any(c in raw for c in "╭╮╰╯"))
-PY
-```
-
-在非 git 目录、conda 处于 `base` 时，期望输出只有一行，形如 `'~/path ❯ '`，后面三项都是 `True`。
+提示符和 Clawd 作用在 shell 上，在任何终端 app 里都生效，所以单独放在 [`../zsh/`](../zsh/README.md)。按那边的 README 装好再回来做第 3 步。
 
 ## 3. Orca 终端配色和字体
 
@@ -129,17 +82,13 @@ sqlite3 -readonly ~/Library/Application\ Support/orca/profiles/local-default/pro
 
 在 `#1e1e1e` 上的对比度：正文 13.3:1，橙色 5.3:1，注释 3.8:1。
 
-提示符：lean 风格，所有段都没有背景色，只靠文字颜色区分。平时是 `~/labs/omp ❯`：路径用 Claude 橙 `#d97757`，被缩写的上级目录用暗一点的 `#a8674f`，后面是橙色的 `❯`。在 git 仓库里，路径后面会出现灰色 `#787878` 的 ` main`，有改动显示黄色 `!n`，有未跟踪文件显示蓝色 `?n`。命令失败时 `❯` 变红 `#e5636f`，右侧显示红色的退出码 `1 ✘`。右侧其他内容也只在需要时出现：命令耗时超过 3 秒，或者激活了非 `base` 的 conda 环境。
+提示符用的也是这套颜色，说明见 [`../zsh/`](../zsh/README.md#外观说明)。
 
 ---
 
 ## 把改动写回仓库
 
-用户在本机调整外观之后：
-
-```sh
-cp ~/.p10k.zsh p10k.zsh
-```
+提示符的改动写回 [`../zsh/`](../zsh/README.md#把改动写回仓库)。
 
 如果换了终端配色，把新主题的 YAML 放进本目录，同时更新第 3 步的文件名和上面的色表。最后提交并推送。
 
